@@ -334,6 +334,7 @@ macro_rules! supported_targets {
 
 supported_targets! {
     ("x86_64-unknown-linux-gnu", x86_64_unknown_linux_gnu),
+    ("x86_64-unknown-jitos-gnu", x86_64_unknown_jitos_gnu),
     ("x86_64-unknown-linux-gnux32", x86_64_unknown_linux_gnux32),
     ("i686-unknown-linux-gnu", i686_unknown_linux_gnu),
     ("i586-unknown-linux-gnu", i586_unknown_linux_gnu),
@@ -987,126 +988,169 @@ impl Target {
         };
 
         macro_rules! key {
-            ($key_name:ident) => ( {
-                let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).map(|o| o.as_string()
-                                    .map(|s| base.options.$key_name = s.to_string()));
-            } );
-            ($key_name:ident, bool) => ( {
+            ($key_name:ident) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
                 obj.find(&name[..])
-                    .map(|o| o.as_boolean()
-                         .map(|s| base.options.$key_name = s));
-            } );
-            ($key_name:ident, Option<u64>) => ( {
+                    .map(|o| o.as_string().map(|s| base.options.$key_name = s.to_string()));
+            }};
+            ($key_name:ident, bool) => {{
+                let name = (stringify!($key_name)).replace("_", "-");
+                obj.find(&name[..]).map(|o| o.as_boolean().map(|s| base.options.$key_name = s));
+            }};
+            ($key_name:ident, Option<u64>) => {{
+                let name = (stringify!($key_name)).replace("_", "-");
+                obj.find(&name[..]).map(|o| o.as_u64().map(|s| base.options.$key_name = Some(s)));
+            }};
+            ($key_name:ident, MergeFunctions) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
                 obj.find(&name[..])
-                    .map(|o| o.as_u64()
-                         .map(|s| base.options.$key_name = Some(s)));
-            } );
-            ($key_name:ident, MergeFunctions) => ( {
+                    .and_then(|o| {
+                        o.as_string().and_then(|s| {
+                            match s.parse::<MergeFunctions>() {
+                                Ok(mergefunc) => base.options.$key_name = mergefunc,
+                                _ => {
+                                    return Some(Err(format!(
+                                        "'{}' is not a valid value for \
+                                         merge-functions. Use 'disabled', \
+                                         'trampolines', or 'aliases'.",
+                                        s
+                                    )));
+                                }
+                            }
+                            Some(Ok(()))
+                        })
+                    })
+                    .unwrap_or(Ok(()))
+            }};
+            ($key_name:ident, PanicStrategy) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).and_then(|o| o.as_string().and_then(|s| {
-                    match s.parse::<MergeFunctions>() {
-                        Ok(mergefunc) => base.options.$key_name = mergefunc,
-                        _ => return Some(Err(format!("'{}' is not a valid value for \
-                                                      merge-functions. Use 'disabled', \
-                                                      'trampolines', or 'aliases'.",
-                                                      s))),
-                    }
-                    Some(Ok(()))
-                })).unwrap_or(Ok(()))
-            } );
-            ($key_name:ident, PanicStrategy) => ( {
+                obj.find(&name[..])
+                    .and_then(|o| {
+                        o.as_string().and_then(|s| {
+                            match s {
+                                "unwind" => base.options.$key_name = PanicStrategy::Unwind,
+                                "abort" => base.options.$key_name = PanicStrategy::Abort,
+                                _ => {
+                                    return Some(Err(format!(
+                                        "'{}' is not a valid value for \
+                                         panic-strategy. Use 'unwind' or 'abort'.",
+                                        s
+                                    )));
+                                }
+                            }
+                            Some(Ok(()))
+                        })
+                    })
+                    .unwrap_or(Ok(()))
+            }};
+            ($key_name:ident, RelroLevel) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).and_then(|o| o.as_string().and_then(|s| {
-                    match s {
-                        "unwind" => base.options.$key_name = PanicStrategy::Unwind,
-                        "abort" => base.options.$key_name = PanicStrategy::Abort,
-                        _ => return Some(Err(format!("'{}' is not a valid value for \
-                                                      panic-strategy. Use 'unwind' or 'abort'.",
-                                                     s))),
-                }
-                Some(Ok(()))
-            })).unwrap_or(Ok(()))
-            } );
-            ($key_name:ident, RelroLevel) => ( {
+                obj.find(&name[..])
+                    .and_then(|o| {
+                        o.as_string().and_then(|s| {
+                            match s.parse::<RelroLevel>() {
+                                Ok(level) => base.options.$key_name = level,
+                                _ => {
+                                    return Some(Err(format!(
+                                        "'{}' is not a valid value for \
+                                         relro-level. Use 'full', 'partial, or 'off'.",
+                                        s
+                                    )));
+                                }
+                            }
+                            Some(Ok(()))
+                        })
+                    })
+                    .unwrap_or(Ok(()))
+            }};
+            ($key_name:ident, list) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).and_then(|o| o.as_string().and_then(|s| {
-                    match s.parse::<RelroLevel>() {
-                        Ok(level) => base.options.$key_name = level,
-                        _ => return Some(Err(format!("'{}' is not a valid value for \
-                                                      relro-level. Use 'full', 'partial, or 'off'.",
-                                                      s))),
-                    }
-                    Some(Ok(()))
-                })).unwrap_or(Ok(()))
-            } );
-            ($key_name:ident, list) => ( {
+                obj.find(&name[..]).map(|o| {
+                    o.as_array().map(|v| {
+                        base.options.$key_name =
+                            v.iter().map(|a| a.as_string().unwrap().to_string()).collect()
+                    })
+                });
+            }};
+            ($key_name:ident, opt_list) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).map(|o| o.as_array()
-                    .map(|v| base.options.$key_name = v.iter()
-                        .map(|a| a.as_string().unwrap().to_string()).collect()
-                        )
-                    );
-            } );
-            ($key_name:ident, opt_list) => ( {
-                let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).map(|o| o.as_array()
-                    .map(|v| base.options.$key_name = Some(v.iter()
-                        .map(|a| a.as_string().unwrap().to_string()).collect())
-                        )
-                    );
-            } );
-            ($key_name:ident, optional) => ( {
+                obj.find(&name[..]).map(|o| {
+                    o.as_array().map(|v| {
+                        base.options.$key_name =
+                            Some(v.iter().map(|a| a.as_string().unwrap().to_string()).collect())
+                    })
+                });
+            }};
+            ($key_name:ident, optional) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
                 if let Some(o) = obj.find(&name[..]) {
-                    base.options.$key_name = o
-                        .as_string()
-                        .map(|s| s.to_string() );
+                    base.options.$key_name = o.as_string().map(|s| s.to_string());
                 }
-            } );
-            ($key_name:ident, LldFlavor) => ( {
+            }};
+            ($key_name:ident, LldFlavor) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).and_then(|o| o.as_string().and_then(|s| {
-                    if let Some(flavor) = LldFlavor::from_str(&s) {
-                        base.options.$key_name = flavor;
-                    } else {
-                        return Some(Err(format!(
-                            "'{}' is not a valid value for lld-flavor. \
-                             Use 'darwin', 'gnu', 'link' or 'wasm.",
-                            s)))
-                    }
-                    Some(Ok(()))
-                })).unwrap_or(Ok(()))
-            } );
-            ($key_name:ident, LinkerFlavor) => ( {
-                let name = (stringify!($key_name)).replace("_", "-");
-                obj.find(&name[..]).and_then(|o| o.as_string().map(|s| {
-                    LinkerFlavor::from_str(&s).ok_or_else(|| {
-                        Err(format!("'{}' is not a valid value for linker-flavor. \
-                                     Use 'em', 'gcc', 'ld' or 'msvc.", s))
+                obj.find(&name[..])
+                    .and_then(|o| {
+                        o.as_string().and_then(|s| {
+                            if let Some(flavor) = LldFlavor::from_str(&s) {
+                                base.options.$key_name = flavor;
+                            } else {
+                                return Some(Err(format!(
+                                    "'{}' is not a valid value for lld-flavor. \
+                                     Use 'darwin', 'gnu', 'link' or 'wasm.",
+                                    s
+                                )));
+                            }
+                            Some(Ok(()))
+                        })
                     })
-                })).unwrap_or(Ok(()))
-            } );
-            ($key_name:ident, link_args) => ( {
+                    .unwrap_or(Ok(()))
+            }};
+            ($key_name:ident, LinkerFlavor) => {{
+                let name = (stringify!($key_name)).replace("_", "-");
+                obj.find(&name[..])
+                    .and_then(|o| {
+                        o.as_string().map(|s| {
+                            LinkerFlavor::from_str(&s).ok_or_else(|| {
+                                Err(format!(
+                                    "'{}' is not a valid value for linker-flavor. \
+                                     Use 'em', 'gcc', 'ld' or 'msvc.",
+                                    s
+                                ))
+                            })
+                        })
+                    })
+                    .unwrap_or(Ok(()))
+            }};
+            ($key_name:ident, link_args) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
                 if let Some(val) = obj.find(&name[..]) {
-                    let obj = val.as_object().ok_or_else(|| format!("{}: expected a \
-                        JSON object with fields per linker-flavor.", name))?;
+                    let obj = val.as_object().ok_or_else(|| {
+                        format!(
+                            "{}: expected a \
+                             JSON object with fields per linker-flavor.",
+                            name
+                        )
+                    })?;
                     let mut args = LinkArgs::new();
                     for (k, v) in obj {
                         let flavor = LinkerFlavor::from_str(&k).ok_or_else(|| {
-                            format!("{}: '{}' is not a valid value for linker-flavor. \
-                                     Use 'em', 'gcc', 'ld' or 'msvc'", name, k)
+                            format!(
+                                "{}: '{}' is not a valid value for linker-flavor. \
+                                 Use 'em', 'gcc', 'ld' or 'msvc'",
+                                name, k
+                            )
                         })?;
 
-                        let v = v.as_array().ok_or_else(||
-                            format!("{}.{}: expected a JSON array", name, k)
-                        )?.iter().enumerate()
-                            .map(|(i,s)| {
-                                let s = s.as_string().ok_or_else(||
-                                    format!("{}.{}[{}]: expected a JSON string", name, k, i))?;
+                        let v = v
+                            .as_array()
+                            .ok_or_else(|| format!("{}.{}: expected a JSON array", name, k))?
+                            .iter()
+                            .enumerate()
+                            .map(|(i, s)| {
+                                let s = s.as_string().ok_or_else(|| {
+                                    format!("{}.{}[{}]: expected a JSON string", name, k, i)
+                                })?;
                                 Ok(s.to_owned())
                             })
                             .collect::<Result<Vec<_>, String>>()?;
@@ -1115,8 +1159,8 @@ impl Target {
                     }
                     base.options.$key_name = args;
                 }
-            } );
-            ($key_name:ident, env) => ( {
+            }};
+            ($key_name:ident, env) => {{
                 let name = (stringify!($key_name)).replace("_", "-");
                 if let Some(a) = obj.find(&name[..]).and_then(|o| o.as_array()) {
                     for o in a {
@@ -1130,7 +1174,7 @@ impl Target {
                         }
                     }
                 }
-            } );
+            }};
         }
 
         key!(is_builtin, bool);
@@ -1222,7 +1266,7 @@ impl Target {
                         if abi.generic() {
                             return Err(format!(
                                 "The ABI \"{}\" is considered to be supported on \
-                                                all targets and cannot be blacklisted",
+                                 all targets and cannot be blacklisted",
                                 abi
                             ));
                         }
