@@ -8,7 +8,7 @@ pub fn target() -> TargetResult {
     base.stack_probes = true;
 
     Ok(Target {
-        llvm_target: "x86_64-unknown-jitos-gnu".to_string(),
+        llvm_target: "x86_64-unknown-jitos".to_string(),
         target_endian: "little".to_string(),
         target_pointer_width: "64".to_string(),
         target_c_int_width: "32".to_string(),
@@ -16,7 +16,7 @@ pub fn target() -> TargetResult {
             .to_string(),
         arch: "x86_64".to_string(),
         target_os: "jitos".to_string(),
-        target_env: "gnu".to_string(),
+        target_env: "relibc".to_string(),
         target_vendor: "unknown".to_string(),
         linker_flavor: LinkerFlavor::Gcc,
         options: base,
